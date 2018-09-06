@@ -4,8 +4,9 @@
 
 
 import cv2
-import FrameEvent as ev
+import GenericEvent as ev
 from threading import Thread, Event
+import threading
 import numpy as np
 from enum import Enum
 #import dlib
@@ -14,6 +15,7 @@ from Tracker_new import *
 from enum import Enum
 #import ipdb
 import pdb
+import time
 
 class ImgProMode(Enum):
     VIDEO = 1
@@ -29,11 +31,14 @@ class ImageProcessor(object):
         self._video = None
         self.weight_path = "22-Aug-2018-yolo-tank-app-22.h5"
         # frame event
-        self.frameEvent = ev.Event_(frame=np.ndarray)
+        self._frameEventSig = {'frame':None}
+        self.frameEvent = ev.GenericEvent(**self._frameEventSig)
         # tracked frame event
-        self.TrackEvent = ev.Event_(rectangle=None, final_image=None)
+        self._trackEventSig = {'rectangle':None, 'final_image':None}
+        self.TrackEvent = ev.GenericEvent(**self._trackEventSig)
         # detection frame event
-        self.DetectionEvent = ev.Event_(rectangles=None, final_image=None)
+        self._detectEventSig = {'rectangles':None, 'final_image':None}
+        self.DetectionEvent = ev.GenericEvent(**self._detectEventSig)
         # thread that handles video capture
         self._videoThread = None 
         # declaring a detection thread
@@ -61,44 +66,107 @@ class ImageProcessor(object):
         # flag to denote whether or not to draw boxes
         self.track_draw_box = None
 
-    # destructor function
-    def __del__(self):
-        # deletion and release activities
-        if self._video is not None:
-            self._video.release()
+    # stops/ pauses the video thread
+    def stop(self, pause=False):
+
+        # stops the frame thread permanently
+        if not pause:
+            # send an event to the polling loop to stop polling
+            if self.mode == ImgProMode.VIDEO:
+                if self._frameloop_stopevent is not None:
+                    print(self._videoThread)
+                    print("flag value before setting frame stop event", self._frameloop_stopevent.is_set())
+                    self._frameloop_stopevent.set()
+                    #pdb.set_trace()
+                    #print(threading.enumerate())
+                    print("flag value after setting frame stop event", self._frameloop_stopevent.is_set())
+                    #self._videoThread.join()
+                self._videoThread = None
+            elif self.mode == ImgProMode.DETECTION:
+                if self._detectloop_stopevent is not None:
+                    self._detectloop_stopevent.set()
+                    #self._detectThread.join()
+                self._detectThread = None
+            elif self.mode == ImgProMode.TRACKING:
+                if self._trackloop_stopevent is not None:
+                    self._trackloop_stopevent.set()
+                    #self._trackThread.join()
+                self._trackThread = None
+            #self._frameloop_stopevent.set()
+            if self._video is not None:
+                self._video.release()
+                print("video released")
             self._video = None
-        self.frameEvent = None
-        if self._frameloop_stopevent is not None:
-            self._frameloop_stopevent._flag = True
-        self._videoThread = None
+
+        #time.sleep(5)
+        return None
+
+
+
+
+    # destructor function
+    # def __del__(self):
+    #     # deletion and release activities
+    #     print("destroying ImageProcessor object")
+    #     if self._video is not None:
+    #         self._video.release()
+    #         self._video = None
+    #     self.frameEvent = None
+    #     if self._videoThread is not None:
+    #         self._frameloop_stopevent.set()
+    #         self._videoThread = None
+    #     if self._trackThread is not None:
+    #         self._trackloop_stopevent.set()
+    #         self._trackThread = None
+    #     if self._detectThread is not None:
+    #         self._detectloop_stopevent.set()
+    #         self._detectThread = None
+    #     print("destroyed ImageProcessor object")
 
     # video thread handler
     def frame_thread_handler(self):
         # main polling loop
-        while not self._frameloop_stopevent._flag:
-            # frame retrieval and checking
-            ok, frame = self._video.read()
-            if not ok:
-                break
+        print(self._frameloop_stopevent.is_set())
+        try:
+            while not self._frameloop_stopevent.is_set():
+                # frame retrieval and checking
+                print("retrieving frame")
+                if self._video is not None:
+                    ok, frame = self._video.read()
+                    print("came to 129, frame read")
+                    if not ok:
+                        print("bad frame recieved")
+                        break
 
-            # Video mode
-            if self.mode == ImgProMode.VIDEO:
-                if self.frameEvent.isSubscribed:
-                    self.frameEvent(frame=frame)
+                print("came to 133")
+                # Video mode
+                if self.mode == ImgProMode.VIDEO:
+                    #print("sending frame")
+                    if self.frameEvent.isSubscribed:
+                        #print("subscribed")
+                        try:
+                            
+                            self.frameEvent(frame=frame)
+                        except:
+                            print("could not fire event")
 
-
-        # debug statement
-        print("frame polling stopped")
-        # re-declaring/initialising the thread
-        self._videoThread = Thread(target=self.frame_thread_handler, name="video thread")
-
+            print("came till here")
+        except:
+            print("Some exception")
+        finally:
+            # debug statement
+            #pdb.set_trace()
+            print("frame polling stopped")
+            # re-declaring/initialising the thread
+            self._videoThread = Thread(target=self.frame_thread_handler, name="video thread")
+            print(self._videoThread)
         return None
 
     # Detection thread handler
     def detect_thread_handler(self):
         """Thread handler for detection"""
 
-        while not self._detectloop_stopevent._flag:
+        while not self._detectloop_stopevent.is_set():
 
             #print("entered detection loop")
             # frame retrieval and checking
@@ -123,7 +191,7 @@ class ImageProcessor(object):
 
     def track_thread_handler(self, roi, base_frame):
         """Thread handler for the tracker"""
-        while not self._trackloop_stopevent._flag:
+        while not self._trackloop_stopevent.is_set():
             #pdb.set_trace() # BREAKPOINT
             if self.has_tracking_started:
                 #frame retrieval and checking
@@ -150,6 +218,7 @@ class ImageProcessor(object):
         # initialize a stop event that needs to be set to pause/stop the video
         self._frameloop_stopevent = Event()
         self._videoThread = Thread(target=self.frame_thread_handler, name="Video thread")
+
 
         if firstrun:
             # initializing video related variables
@@ -237,34 +306,7 @@ class ImageProcessor(object):
             self._trackThread.start()
         return None
 
-    # stops/ pauses the video thread
-    def stop(self, pause=False):
-
-        # stops the frame thread permanently
-        if not pause:
-
-            # send an event to the polling loop to stop polling
-            # send an event to the polling loop to stop polling
-            if self.mode == ImgProMode.VIDEO:
-                self._frameloop_stopevent.set()
-            elif self.mode == ImgProMode.DETECTION:
-                self._detectloop_stopevent.set()
-            elif self.mode == ImgProMode.TRACKING:
-                self._trackloop_stopevent.set()
-            #self._frameloop_stopevent.set()
-            self._video.release()
-            self._video = None
-
-        # stops the frame thread but does not delete the video object - mainly for pause
-        elif pause:
-
-            # send an event to the polling loop to stop polling
-            if self.mode == ImgProMode.VIDEO:
-                self._frameloop_stopevent.set()
-            elif self.mode == ImgProMode.DETECTION:
-                self._detectloop_stopevent.set()
-            elif self.mode == ImgProMode.TRACKING:
-                self._trackloop_stopevent.set()
+    
 
     # Mode change
     def change_mode(self, mode):
