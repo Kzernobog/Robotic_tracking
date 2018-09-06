@@ -19,6 +19,7 @@ class GenericEvent(object):
         self._argnames = None
         self._handlers = None
         self._signature = None
+        self._num_handlers = None
 
     # returns the signature of the event in string format
     def _kwargs_str(self):
@@ -42,11 +43,13 @@ class GenericEvent(object):
             raise ValueError("Listener must have these arguments: (%s)"
                              % self._kwargs_str())
         self._handlers.append(handler)
+        self._num_handlers = len(self._handlers)
         return self
 
     # overloading the decrement operator--> -=
     def __isub__(self, handler):
         self._handlers.remove(handler)
+        self._num_handlers = len(self._handlers)
         return self
 
     # overloading the function call operator--> ()
@@ -56,7 +59,16 @@ class GenericEvent(object):
             raise ValueError("This EventHook must be called with these " +
                              "keyword arguments: (%s)" % self._kwargs_str())
         for handler in self._handlers[:]:
-            handler(**kwargs)
+            try:
+                #print("firing event")
+                print("about to fire")
+                print(handler)
+                handler(**kwargs)
+                print("fired event")
+            except:
+                print("could not fire event")
+
+        return None
 
     # returns the event signature
     def __repr__(self):
@@ -65,7 +77,12 @@ class GenericEvent(object):
     # property that retrieves if any handlers have subscribed to the event
     @property
     def isSubscribed(self):
-        return True if len(self._handlers) != 0 else False
+        #print("subscribed checking")
+        if self._num_handlers > 0:
+            #print("check passed")
+            return True
+        else:
+            return False
 
 if __name__ == "__main__":
     pass

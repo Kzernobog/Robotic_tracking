@@ -69,7 +69,7 @@ class Event_(object):
     # property that retrieves if any handlers have subscribed to the event
     @property
     def isSubscribed(self):
-        return True if len(self._handlers) != 0 else False
+        return True if len(self._handlers) > 0 else False
 
 
 def main():
