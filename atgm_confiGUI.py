@@ -2,6 +2,7 @@ import time
 import struct
 import pdb
 from threading import Thread
+import threading
 import atgmData as ad
 import atgmCalibration as calibrator
 import hexcompute as hc
@@ -20,6 +21,7 @@ from PIL import Image
 from PIL import ImageTk
 from PIL.ImageTk import PhotoImage
 import cv2
+import sys
 
 class Atgm_Diagnostic_GUI(object):
     
@@ -29,6 +31,7 @@ class Atgm_Diagnostic_GUI(object):
         self.RIGHT = 0
         # declare a window
         self.root = tk.Tk()
+        self.root.protocol("WM_DELETE_WINDOW", self._exit)
         self.root.title("Serial Diagnostics")
         self.width = 720
         self.height = 480
@@ -317,10 +320,13 @@ class Atgm_Diagnostic_GUI(object):
         self.atgmCommand_send_button = ttk.Button(self.atgm_command_frame,
                                                   text='send',
                                                   command=self.send_atgmCommand)
-        self.atgmCommand_send_button.grid(row=6, column=3)
+        self.atgmCommand_send_button.grid(row=6, column=4)
 
-        self.atgmCommand_send_button = ttk.Button(self.atgm_command_frame, text='start feed', command=self._start_video_feed)
-        self.atgmCommand_send_button.grid(row=6, column=2)
+        self.atgmCommand_feed_button = ttk.Button(self.atgm_command_frame, text='start feed', command=self._start_video_feed)
+        self.atgmCommand_feed_button.grid(row=6, column=2)
+
+        self.atgmCommand_feed_button = ttk.Button(self.atgm_command_frame, text='stop everything', command=self._image_processor_clean_up)
+        self.atgmCommand_feed_button.grid(row=6, column=3)
 
         # open port button
         self.atgmCommand_openPort_button = ttk.Button(self.atgm_command_frame,
@@ -389,19 +395,28 @@ class Atgm_Diagnostic_GUI(object):
 
     # handler for the frame event
     def _frame_event_handler(self, frame):
-        # switch to RGB format
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # make it PIL ImageTk compatible
-        image = Image.fromarray(image)
-        # make it imgtk compatible
-        image = ImageTk.PhotoImage(image)
-        # store the image in the label
-        self.atgm_imagelabel.imgtk = image
-        # configure the image to the corresponding size
-        self.atgm_imagelabel.configure(image=image)
-        # store the reference to the image so that Python's gc doesn't erase the image
-        self.atgm_imagelabel.image = image
-        return None
+        try:
+            # switch to RGB format
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            print("displaying frame")
+            # make it PIL ImageTk compatible
+            image = Image.fromarray(image)
+            # make it imgtk compatible
+            print("displaying frame")
+            image = ImageTk.PhotoImage(image)
+            # store the image in the label
+            print("displaying frame")
+            self.atgm_imagelabel.imgtk = image
+            # configure the image to the corresponding size
+            self.atgm_imagelabel.configure(image=image)
+            # store the reference to the image so that Python's gc doesn't erase the image
+            self.atgm_imagelabel.image = image
+            print("displayed frame")
+            return None
+        except:
+            print("frame recieved exception")
+            return None
+
 
     # handler of track frame events
     def _track_event_handler(self, rectangle, final_image):
@@ -721,11 +736,39 @@ class Atgm_Diagnostic_GUI(object):
 
     def run(self):
         self.root.mainloop()
+        return None
 
-    def __exit__(self):
+    def _exit(self):
+        #pdb.set_trace()
+        
+
+        #self._imageProcessor.stop()
+        #self._imageProcessor._videoThread.join()
+        #self._imageProcessor.__del__()
+        #time.sleep(2)
+
+        #pdb.set_trace()
+        #time.sleep(5)
+        #print(threading.active_count())
+        #print(threading.enumerate())
+        #time.sleep(10)
+        print("destroying window")
+        self.root.destroy()
+        return None
+
+        #sys.exit()
+
+    def _image_processor_clean_up(self):
+        '''
+        cleans up the image processor threading variables
+        '''
+        self._imageProcessor.DetectionEvent -= self._detection_event_handler
+        self._imageProcessor.TrackEvent -= self._track_event_handler
+        self._imageProcessor.frameEvent -= self._frame_event_handler
+        self._imageProcessor.stop()
         if self._atgmMedia is not None:
             self._atgmMedia.release()
-        self._imageProcessor.stop()
+        return None
 
 
     def point_in_box(self, point, box):
@@ -758,9 +801,20 @@ class Atgm_Diagnostic_GUI(object):
             self._first_track = False
             return None
 
+    # release all variables
+    # def release(self):
+    #     self._imageProcessor.stop()
+        
+
+
 def main():
     window = Atgm_Diagnostic_GUI()
     window.run()
+    print(threading.active_count())
+    print(threading.enumerate())
+    print("quiting")
+    #time.sleep(5)
+
 
 if __name__ == "__main__":
     main()
