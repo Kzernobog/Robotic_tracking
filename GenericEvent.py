@@ -60,11 +60,7 @@ class GenericEvent(object):
                              "keyword arguments: (%s)" % self._kwargs_str())
         for handler in self._handlers[:]:
             try:
-                #print("firing event")
-                print("about to fire")
-                print(handler)
                 handler(**kwargs)
-                print("fired event")
             except:
                 print("could not fire event")
 
@@ -77,9 +73,7 @@ class GenericEvent(object):
     # property that retrieves if any handlers have subscribed to the event
     @property
     def isSubscribed(self):
-        #print("subscribed checking")
         if self._num_handlers > 0:
-            #print("check passed")
             return True
         else:
             return False
